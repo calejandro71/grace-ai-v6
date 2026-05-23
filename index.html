@@ -1856,7 +1856,7 @@ window.speak = function(text) {
 function playGraceAudio(audioId, fallbackText) {
   speechSynthesis.cancel(); // stop any browser TTS that may still be running
   graceSoundBars.classList.add('active');
-  var audio = new Audio('audio/' + audioId + '.mp3');
+  var audio = new Audio('https://pub-d078fe3d9e9b411082d60ee89362b0ec.r2.dev/' + audioId + '.mp3');
   audio.onended = function() {
     graceSoundBars.classList.remove('active');
     if (voiceConvActive) startListeningForUser();
@@ -1937,7 +1937,7 @@ function startHeroVoice() {
   graceMicLabel.textContent = 'Grace is speaking…';
   speechSynthesis.cancel();
 
-  var introAudio = new Audio('audio/intro.mp3');
+  var introAudio = new Audio('https://pub-d078fe3d9e9b411082d60ee89362b0ec.r2.dev/intro.mp3');
   graceSoundBars.classList.add('active');
   introAudio.onended = function() {
     graceSoundBars.classList.remove('active');
