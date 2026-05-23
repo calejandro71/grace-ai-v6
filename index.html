@@ -1407,7 +1407,8 @@ function extractSlots(text) {
 /* ====================== INTENT: does the user want DATA? ================== */
 function wantsProducts(text) {
   const t = text.toLowerCase();
-  return /show me|pull up|see (the )?(products|options|rates)|what.?s available|compare|find me|which (ones|products|annuit)|best rate|highest|options for me|let.?s see/.test(t);
+  if (/\brecommend(ed)?\b/.test(t)) return false;
+  return /\bproduct(s)?\b|show me|pull up|see (the )?(products|options|rates)|what.?s available|compare|find me|which (ones|products|annuit)|best rate|highest|options for me|let.?s see|matching/.test(t);
 }
 
 function hasEnoughForProducts() {
@@ -1462,11 +1463,12 @@ async function askBrain(text) {
       type:'text',
       text:"That's a great question — and an important one to get exactly right. Rather than give you a quick answer, I'd like to connect you with a licensed specialist who can go deep on that for your specific situation. In the meantime, I can also show you products that match what you're looking for. Which would help more?",
       offerSpecialist: true,
-      offerProducts: hasEnoughForProducts()
+      offerProducts: hasEnoughForProducts(),
+      audioId: 'handoff_main'
     };
   }
   if (profile.llmCalls >= CONFIG.brain.maxLlmCallsPerSession) {
-    return { type:'text', text:"We've covered a lot! To keep going in depth, the best next step is a quick chat with a licensed specialist. Want me to set that up, or pull up products that match your filters?", offerSpecialist:true, offerProducts: hasEnoughForProducts() };
+    return { type:'text', text:"We've covered a lot! To keep going in depth, the best next step is a quick chat with a licensed specialist. Want me to set that up, or pull up products that match your filters?", offerSpecialist:true, offerProducts: hasEnoughForProducts(), audioId: 'handoff_limit' };
   }
   return await askLLM(text);
 }
@@ -1501,7 +1503,7 @@ async function askLLM(text) {
     return { type:'text', text: answer, offerProducts: hasEnoughForProducts() };
   } catch (e) {
     // Graceful offline fallback — no broken UX if backend isn't live yet
-    return { type:'text', text:"That's a thoughtful question. I'd want a licensed specialist to give you a precise answer on that one. In the meantime, I can show you products that match what you're looking for — want me to pull those up?", offerProducts: hasEnoughForProducts() };
+    return { type:'text', text:"That's a thoughtful question. I'd want a licensed specialist to give you a precise answer on that one. In the meantime, I can show you products that match what you're looking for — want me to pull those up?", offerProducts: hasEnoughForProducts(), audioId: 'handoff_thoughtful' };
   }
 }
 

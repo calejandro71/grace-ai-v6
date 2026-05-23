@@ -590,6 +590,18 @@ const KNOWLEDGE = [
     id: 'time_value_of_money', tier: 'intermediate',
     keywords: ['time value of money','why is money worth more now','why money today is worth more','discount rate','future dollars worth less','value of money over time'],
     answer: "The <em>time value of money</em> is the principle that a dollar today is worth more than a dollar in the future — because the dollar you have now can be invested and earn interest in the meantime. This concept is the foundation of all annuity pricing. When an insurer quotes you a monthly income for a given lump sum, they are calculating the present value of all those future payments and confirming it equals your premium. As interest rates rise, future dollars are discounted more heavily, so the insurer can pay you more income for the same premium — which is why annuity income rates tend to be higher in higher interest-rate environments. It's also why starting income earlier produces a lower monthly payment than waiting: fewer remaining dollars need to cover more years."
+  },
+  {
+    id: 'handoff_main', tier: 'meta', keywords: [],
+    answer: "That's a great question — and an important one to get exactly right. Rather than give you a quick answer, I'd like to connect you with a licensed specialist who can go deep on that for your specific situation. In the meantime, I can also show you products that match what you're looking for. Which would help more?"
+  },
+  {
+    id: 'handoff_limit', tier: 'meta', keywords: [],
+    answer: "We've covered a lot! To keep going in depth, the best next step is a quick chat with a licensed specialist. Want me to set that up, or pull up products that match your filters?"
+  },
+  {
+    id: 'handoff_thoughtful', tier: 'meta', keywords: [],
+    answer: "That's a thoughtful question. I'd want a licensed specialist to give you a precise answer on that one. In the meantime, I can show you products that match what you're looking for — want me to pull those up?"
   }
 
 ];
