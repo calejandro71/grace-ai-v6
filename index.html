@@ -1580,7 +1580,7 @@ function addGraceMessage(text, opts={}) {
   const bubble=el.querySelector('.msg-bubble');
   scrollToBottom();
   typeInto(bubble, text, ()=>{
-    if (!isMuted && hasGesture) speak(stripHtml(text));
+    if (!isMuted && hasGesture && !voiceConvActive) speak(stripHtml(text));
     if (opts.offerProducts) showProductsButton();
     if (opts.offerSpecialist) showSpecialistButton();
   });
@@ -1949,15 +1949,17 @@ function startHeroVoice() {
     startHeroListening();
   };
   introAudio.onerror = function() {
-    // Fallback to browser TTS if MP3 fails
     graceSoundBars.classList.remove('active');
-    var introText = "Hi, I'm Grace. I can help you explore annuities, rates, income options, bonuses, and current market information using real industry data from over 80 different annuity companies. Most visitors start with one question. What's yours? Click the microphone below to talk with me, or type in your question.";
-    var u = new SpeechSynthesisUtterance(introText);
-    u.rate = 0.92; u.pitch = 1.05; u.volume = 1;
-    u.onend = function() { if (SR) startHeroListening(); };
-    speechSynthesis.speak(u);
+    graceMicBtn.classList.remove('active');
+    graceMicLabel.textContent = 'Tap to speak with Grace';
+    if (SR) startHeroListening();
   };
-  introAudio.play().catch(function() { introAudio.onerror(); });
+  introAudio.play().catch(function() {
+    graceSoundBars.classList.remove('active');
+    graceMicBtn.classList.remove('active');
+    graceMicLabel.textContent = 'Tap to speak with Grace';
+    if (SR) startHeroListening();
+  });
 }
 
 function startHeroListening() {
