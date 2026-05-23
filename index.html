@@ -1441,9 +1441,9 @@ async function askBrain(text) {
   // 1. Direct request for data
   if (wantsProducts(text)) {
     if (hasEnoughForProducts()) {
-      return { type:'products', text:"Absolutely — let me pull up the products that match what you've told me. Remember, I can't recommend one over another; I'm just showing you what fits your filters." };
+      return { type:'products', text:"Absolutely — let me pull up the products that match what you've told me. Remember, I can't recommend one over another; I'm just showing you what fits your filters.", audioId: 'products_opening' };
     }
-    return { type:'text', text:"Happy to pull up products. To narrow it to ones that actually fit, can you tell me what you're after first — steady income, growth, safety, or RMD help?" };
+    return { type:'text', text:"Happy to pull up products. To narrow it to ones that actually fit, can you tell me what you're after first — steady income, growth, safety, or RMD help?", audioId: 'products_clarify' };
   }
 
   // 2. Knowledge cache
@@ -1660,7 +1660,10 @@ async function handleUserMessage(text) {
   if (result.type==='products') {
     addGraceMessage(result.text, {offerProducts:false});
     setTimeout(showProductsButton, 600);
-    if (!isMuted && voiceConvActive) window.speak(stripHtml(result.text));
+    if (!isMuted && voiceConvActive) {
+      if (result.audioId) playGraceAudio(result.audioId, stripHtml(result.text));
+      else window.speak(stripHtml(result.text));
+    }
   } else {
     addGraceMessage(result.text, {offerProducts: !!result.offerProducts, offerSpecialist: !!result.offerSpecialist});
     if (!isMuted && voiceConvActive) {
