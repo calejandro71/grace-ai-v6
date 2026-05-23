@@ -1747,11 +1747,23 @@ async function ghlSpeak(text){
     const blob=await r.blob(); const a=new Audio(URL.createObjectURL(blob)); a.play();
   }catch(e){ /* fall back silently */ }
 }
+function syncListenToggleUI() {
+  if (isMuted) {
+    listenToggle.classList.remove('on');
+    listenLabel.textContent = "Turn on Grace's voice";
+    listenIcon.innerHTML = '<path d="M11 5L6 9H2v6h4l5 4V5z"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/>';
+  } else {
+    listenToggle.classList.add('on');
+    listenLabel.textContent = "Turn off Grace's voice";
+    listenIcon.innerHTML = '<path d="M11 5L6 9H2v6h4l5 4V5z"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/>';
+  }
+}
 listenToggle.addEventListener('click', ()=>{
   hasGesture=true;
   isMuted=!isMuted;
-  if(isMuted){ speechSynthesis.cancel(); listenToggle.classList.remove('on'); listenLabel.textContent="Turn on Grace's voice"; listenIcon.innerHTML='<path d="M11 5L6 9H2v6h4l5 4V5z"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/>'; }
-  else { listenToggle.classList.add('on'); listenLabel.textContent="Grace's voice is on"; listenIcon.innerHTML='<path d="M11 5L6 9H2v6h4l5 4V5z"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/>'; const last=profile.history.filter(m=>m.role==='grace').pop(); if(last)speak(stripHtml(last.text)); sessionStorage.setItem('graceListen','1'); }
+  syncListenToggleUI();
+  if(isMuted){ speechSynthesis.cancel(); }
+  else { const last=profile.history.filter(m=>m.role==='grace').pop(); if(last)speak(stripHtml(last.text)); sessionStorage.setItem('graceListen','1'); }
 });
 if('speechSynthesis'in window){ speechSynthesis.getVoices(); speechSynthesis.onvoiceschanged=()=>speechSynthesis.getVoices(); }
 
@@ -1922,6 +1934,7 @@ graceMicBtn.addEventListener('click', function(e) {
   hasGesture = true;
   isMuted = false;
   voiceConvActive = true;
+  syncListenToggleUI();
   if (!conversationStarted) {
     startHeroVoice();
   } else {
