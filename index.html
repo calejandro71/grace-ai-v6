@@ -1727,9 +1727,16 @@ document.getElementById('ppBack').addEventListener('click', closeProducts);
 
 /* ====================== VOICE: TTS ==================================== */
 let isMuted=true, isSpeaking=false, hasGesture=false;
+let _currentAudio=null, _lastAudioId=null, _lastAudioText='';
 const listenToggle=document.getElementById('listenToggle');
 const listenLabel=document.getElementById('listenLabel');
 const listenIcon=document.getElementById('listenIcon');
+
+function stopCurrentAudio() {
+  if (_currentAudio) { _currentAudio.pause(); _currentAudio.src=''; _currentAudio=null; }
+  speechSynthesis.cancel();
+  graceSoundBars.classList.remove('active');
+}
 
 function pickVoice(){
   const vs=speechSynthesis.getVoices();
@@ -1767,8 +1774,17 @@ listenToggle.addEventListener('click', ()=>{
   hasGesture=true;
   isMuted=!isMuted;
   syncListenToggleUI();
-  if(isMuted){ speechSynthesis.cancel(); }
-  else { const last=profile.history.filter(m=>m.role==='grace').pop(); if(last)speak(stripHtml(last.text)); sessionStorage.setItem('graceListen','1'); }
+  if (isMuted) {
+    stopCurrentAudio();
+  } else {
+    sessionStorage.setItem('graceListen','1');
+    if (_lastAudioId) {
+      playGraceAudio(_lastAudioId, _lastAudioText);
+    } else {
+      const last=profile.history.filter(m=>m.role==='grace').pop();
+      if(last) speak(stripHtml(last.text));
+    }
+  }
 });
 if('speechSynthesis'in window){ speechSynthesis.getVoices(); speechSynthesis.onvoiceschanged=()=>speechSynthesis.getVoices(); }
 
@@ -1871,20 +1887,25 @@ window.speak = function(text) {
 
 /* Play a pre-recorded ElevenLabs MP3; falls back to browser TTS on error */
 function playGraceAudio(audioId, fallbackText) {
-  speechSynthesis.cancel(); // stop any browser TTS that may still be running
+  stopCurrentAudio();
+  _lastAudioId = audioId;
+  _lastAudioText = fallbackText;
   graceSoundBars.classList.add('active');
-  var audio = new Audio('https://pub-d078fe3d9e9b411082d60ee89362b0ec.r2.dev/' + audioId + '.mp3');
-  audio.onended = function() {
+  _currentAudio = new Audio('https://pub-d078fe3d9e9b411082d60ee89362b0ec.r2.dev/' + audioId + '.mp3');
+  _currentAudio.onended = function() {
     graceSoundBars.classList.remove('active');
+    _currentAudio = null;
     if (voiceConvActive) startListeningForUser();
   };
-  audio.onerror = function() {
+  _currentAudio.onerror = function() {
     graceSoundBars.classList.remove('active');
-    window.speak(fallbackText);
+    _currentAudio = null;
+    if (!isMuted) window.speak(fallbackText);
   };
-  audio.play().catch(function() {
+  _currentAudio.play().catch(function() {
     graceSoundBars.classList.remove('active');
-    window.speak(fallbackText);
+    _currentAudio = null;
+    if (!isMuted) window.speak(fallbackText);
   });
 }
 
