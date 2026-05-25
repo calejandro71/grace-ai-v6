@@ -284,7 +284,7 @@
   .grace-mic-btn {
     width: 72px; height: 72px; border-radius: 50%; flex-shrink: 0;
     background: var(--gold);
-    border: none; cursor: pointer;
+    border: none; cursor: pointer; position: relative;
     display: flex; align-items: center; justify-content: center;
     transition: all 0.2s; box-shadow: 0 4px 20px rgba(184,137,58,0.4);
   }
@@ -292,6 +292,8 @@
   .grace-mic-btn.active { animation: micPulse 1.5s ease-in-out infinite; }
   @keyframes micPulse { 0%,100%{box-shadow:0 0 0 0 rgba(184,137,58,0.5);} 50%{box-shadow:0 0 0 16px rgba(184,137,58,0);} }
   .grace-mic-btn svg { width: 34px; height: 34px; }
+  .grace-mic-btn.muted { background: var(--red); animation: none; }
+  .grace-mic-btn.muted::after { content:''; position:absolute; width:3px; height:76%; background:white; top:12%; left:50%; transform:translateX(-50%) rotate(-45deg); border-radius:2px; }
   .grace-mic-text { display: flex; flex-direction: column; gap: 4px; }
   .grace-mic-label { font-size: 17px; font-weight: 700; color: var(--ink); font-family:'Source Sans 3',sans-serif; }
   .grace-mic-desc { font-size: 14px; color: var(--ink-soft); line-height: 1.4; font-family:'Source Sans 3',sans-serif; }
@@ -1958,6 +1960,25 @@ function startListeningForUser() {
 graceMicBtn.addEventListener('click', function(e) {
   e.stopPropagation();
   hasGesture = true;
+
+  // If voice is already active, toggle mute on/off
+  if (voiceConvActive) {
+    isMuted = !isMuted;
+    syncListenToggleUI();
+    if (isMuted) {
+      stopCurrentAudio();
+      graceMicBtn.classList.remove('active');
+      graceMicBtn.classList.add('muted');
+      graceMicLabel.textContent = 'Muted — tap to unmute';
+    } else {
+      graceMicBtn.classList.remove('muted');
+      if (_lastAudioId) playGraceAudio(_lastAudioId, _lastAudioText);
+      else startListeningForUser();
+    }
+    return;
+  }
+
+  // First activation
   isMuted = false;
   voiceConvActive = true;
   syncListenToggleUI();
@@ -1988,18 +2009,22 @@ function startHeroVoice() {
     }
     startHeroListening();
   };
-  _currentAudio.onerror = function() {
+  var _heroFallback = function() {
     graceSoundBars.classList.remove('active');
     _currentAudio = null;
-    graceMicLabel.textContent = 'Tap to speak with Grace';
-    if (SR) startHeroListening();
+    if (!isMuted) {
+      var u = new SpeechSynthesisUtterance('What would you like to learn about?');
+      var v = pickVoice(); if (v) u.voice = v;
+      u.rate = 0.96; u.pitch = 1.02;
+      u.onend = function() { if (SR) startHeroListening(); };
+      speechSynthesis.speak(u);
+    } else {
+      graceMicLabel.textContent = 'Tap to speak with Grace';
+      if (SR) startHeroListening();
+    }
   };
-  _currentAudio.play().catch(function() {
-    graceSoundBars.classList.remove('active');
-    _currentAudio = null;
-    graceMicLabel.textContent = 'Tap to speak with Grace';
-    if (SR) startHeroListening();
-  });
+  _currentAudio.onerror = _heroFallback;
+  _currentAudio.play().catch(_heroFallback);
 }
 
 function startHeroListening() {
