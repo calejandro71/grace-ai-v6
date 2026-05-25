@@ -2017,7 +2017,7 @@ function startHeroVoice() {
     graceSoundBars.classList.remove('active');
     _currentAudio = null;
     if (!isMuted) {
-      var fallbackText = audioId === 'intro' ? GRACE_GREETING : 'What would you like to learn about?';
+      var fallbackText = audioId === 'mic_prompt' ? 'What would you like to learn about?' : GRACE_GREETING;
       var u = new SpeechSynthesisUtterance(fallbackText);
       var v = pickVoice(); if (v) u.voice = v;
       u.rate = 0.96; u.pitch = 1.02;
