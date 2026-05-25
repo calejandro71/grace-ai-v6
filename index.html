@@ -1845,7 +1845,7 @@ const graceSoundBars = document.getElementById('graceSoundBars');
 let voiceConvActive = false;
 let convMicRec = null;
 let introPlayed = false;
-const AUDIO_CDN = 'https://pub-d078fe3d9e9b411082d60ee89362b0ec.r2.dev/';
+const AUDIO_CDN = 'audio/';
 
 const GRACE_GREETING = "Hi, I'm Grace. I can help you explore annuities, rates, income options, bonuses, and current market information using real industry data from over 80 different annuity companies. Most visitors start with one question. What's yours? Click the microphone below to talk with me, or type in your question.";
 
@@ -2017,7 +2017,7 @@ function startHeroVoice() {
   graceMicLabel.textContent = 'Grace is speaking…';
   stopCurrentAudio();
 
-  var audioId = introPlayed ? 'mic_prompt' : 'intro2';
+  var audioId = introPlayed ? 'mic_prompt' : 'intro';
   introPlayed = true;
   _currentAudio = new Audio(AUDIO_CDN + audioId + '.mp3');
   graceSoundBars.classList.add('active');
