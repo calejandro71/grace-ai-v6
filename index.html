@@ -1437,6 +1437,21 @@ function lookupKnowledge(text) {
    3. Knowledge cache hit -> canned answer (free)
    4. LLM fallback (only if mode allows + under call cap)
    ========================================================================= */
+function notifyGhlUnanswered(question) {
+  if (!CONFIG.ghl || !CONFIG.ghl.enabled || !CONFIG.ghl.leadWebhookUrl) return;
+  fetch(CONFIG.ghl.leadWebhookUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      tags: ['grace-unanswered-question'],
+      customField: {
+        unanswered_question: question,
+        grace_transcript: profile.history.slice(-10).map(function(m){ return m.role + ': ' + m.text; }).join('\n')
+      }
+    })
+  }).catch(function(){});
+}
+
 async function askBrain(text) {
   extractSlots(text);
 
@@ -1459,7 +1474,10 @@ async function askBrain(text) {
     return { type:'text', text:k.answer + suffix, offerProducts: hasEnoughForProducts(), audioId: k.id };
   }
 
-  // 3. Novel question — OPTION C: graceful handoff (no paid LLM)
+  // 3. No knowledge match — tag GHL immediately regardless of what path follows
+  notifyGhlUnanswered(text);
+
+  // 4. Novel question — OPTION C: graceful handoff (no paid LLM)
   if (CONFIG.brain.mode === 'cache_only') {
     return {
       type:'text',
@@ -2340,38 +2358,12 @@ window.handleUserMessage = function(text) {
   // We hook into addGraceMessage to detect the fallback response
 };
 
-/* ====================== V6: INTERCEPT UNANSWERED QUESTIONS ============== */
-var _v6OrigAdd = window.addGraceMessage || addGraceMessage;
+/* ====================== V6: TRACK LAST USER MESSAGE ===================== */
 var _lastUserText = '';
-// Track user messages
 var _v6OrigAddUser = addUserMessage;
 window.addUserMessage = function(text) {
   _lastUserText = text;
   _v6OrigAddUser(text);
-};
-
-// Detect fallback/no-match responses and log to GHL
-var NO_MATCH_PHRASES = [
-  "i'd like to connect you with a licensed specialist",
-  "could you rephrase",
-  "if it touches on general annuity concepts",
-  "let me be upfront"
-];
-window.addGraceMessage = function(text, opts) {
-  _v6OrigAdd(text, opts);
-  var lower = (text || '').toLowerCase();
-  var isNoMatch = NO_MATCH_PHRASES.some(function(p) { return lower.indexOf(p) > -1; });
-  if (isNoMatch && _lastUserText) {
-    // Log unanswered question to GHL
-    fetch(CONFIG.ghl.leadWebhookUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        tags: ['unanswered-question', 'grace-lead'],
-        customField: { unanswered_question: _lastUserText, grace_transcript: profile.history.map(function(m){ return m.role + ': ' + m.text; }).join('\n') }
-      })
-    }).catch(function(){});
-  }
 };
 
 /* ====================== V6: HELP ME CHOOSE — CONVERSATIONAL FLOW ========= */
