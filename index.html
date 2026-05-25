@@ -1437,6 +1437,67 @@ function lookupKnowledge(text) {
    3. Knowledge cache hit -> canned answer (free)
    4. LLM fallback (only if mode allows + under call cap)
    ========================================================================= */
+
+/* ====================== CONTEXT-AWARE CONVERSATION STATE ================ */
+let _lastKnowledgeId  = null;   // ID of the last knowledge entry served
+let _lastOfferedProd  = false;  // last Grace response offered products
+let _lastOfferedSpec  = false;  // last Grace response offered specialist
+let _lastGraceAnswer  = '';     // full text of Grace's last answer
+
+// Specific topic words for non-generic knowledge entries (used to enrich vague queries)
+const ENTRY_TOPIC = {
+  'income_rider_intro':'income rider','die_before_income':'income rider',
+  'how_riders_calculated':'income rider','riders_not_all_same':'income rider',
+  'rider_costs':'income rider','add_rider_to_existing':'income rider',
+  'cola_vs_cpi':'cost of living rider','fia':'fixed index annuity',
+  'fia_features':'fixed index annuity','crediting_methods':'fixed index annuity',
+  'anchor_strategy':'fixed index annuity','floor':'floor protection annuity',
+  'rila':'registered index linked annuity','variable_liquidity':'variable annuity',
+  'variable_subaccounts':'variable annuity','glwb':'guaranteed lifetime withdrawal benefit',
+  'gmab':'guaranteed minimum accumulation benefit','surrender_charges':'surrender charges',
+  'market_value_adjustment':'market value adjustment','annuitization':'annuitization',
+  'exclusion_ratio':'exclusion ratio taxes','rmd':'required minimum distribution',
+  'rollover':'IRA rollover annuity','mortality_pooling':'mortality pooling',
+};
+function _topicCtx() {
+  return _lastKnowledgeId ? (ENTRY_TOPIC[_lastKnowledgeId] || 'annuity annuities') : 'annuity annuities';
+}
+
+// Detect affirmative responses
+function _isYes(text) {
+  return /^\s*(yes|yeah|yep|yup|sure|ok|okay|please|go ahead|absolutely|tell me|sounds good|great|definitely|of course|i would|let'?s|do it|why not|i'?m interested|i want|i'?d like|alright|all right|uh.?huh|please do|i will|i'?d love|love to|correct|exactly|perfect|right)\b/i.test(text);
+}
+
+// Detect negative responses
+function _isNo(text) {
+  return /^\s*(no|nope|not really|no thanks|not now|i'?m good|maybe later|skip|pass|nah|not interested|maybe next time|i'?ll pass|don'?t)\b/i.test(text);
+}
+
+// Parse Grace's last answer for "would you like to learn about X?" → extract X
+function _extractOfferedTopic(answerHtml) {
+  if (!answerHtml) return null;
+  const plain = answerHtml.replace(/<[^>]+>/g, '');
+  const m = plain.match(/(?:would you like|want to|like to|shall i|should i)\s+(?:to\s+)?(?:learn|hear|know|go into|explain|talk|discuss|explore)\s+(?:about\s+|more about\s+)?([^?,.!]{4,70})/i);
+  return m ? m[1].trim() : null;
+}
+
+// Enrich a vague query by injecting topic context next to bare generic nouns
+function _enrichQuery(text, ctx) {
+  const generics = ['types','kinds','options','ways','forms','varieties','differences','features','benefits','costs','charges','fees','advantages','disadvantages','riders','structures'];
+  for (const g of generics) {
+    if (new RegExp('\\b' + g + '\\b(?!\\s+of\\b)', 'i').test(text)) {
+      return text.replace(new RegExp('\\b' + g + '\\b', 'i'), g + ' of ' + ctx);
+    }
+  }
+  if (/^\s*(tell me more|more about|continue|go on|elaborate|explain more|more detail|what else)\b/i.test(text)) {
+    return 'explain more about ' + ctx;
+  }
+  if (/\b(it|that|this|they|them|those|these)\b/i.test(text) && !/annuit/i.test(text)) {
+    return text + ' ' + ctx;
+  }
+  return text + ' ' + ctx;
+}
+
 function notifyGhlUnanswered(question) {
   if (!CONFIG.ghl || !CONFIG.ghl.enabled || !CONFIG.ghl.leadWebhookUrl) return;
   fetch(CONFIG.ghl.leadWebhookUrl, {
@@ -1455,29 +1516,68 @@ function notifyGhlUnanswered(question) {
 async function askBrain(text) {
   extractSlots(text);
 
+  // 0. Yes / No context resolution (must run before keyword matching)
+  if (_isYes(text)) {
+    if (_lastOfferedProd) {
+      if (hasEnoughForProducts()) return { type:'products', text:"Perfect — let me pull those up.", audioId:'products_opening', offerProducts:true };
+      return { type:'text', text:"Happy to pull up products. To narrow it to ones that actually fit, can you tell me what you're after first — steady income, growth, safety, or RMD help?", audioId:'products_clarify' };
+    }
+    if (_lastOfferedSpec) {
+      return { type:'text', text:"Great! A licensed specialist can review your specific situation at no cost. Want to leave your contact info so they can reach out?", offerSpecialist:true };
+    }
+    // Try to resolve "yes" against what Grace offered in her last answer
+    const offeredTopic = _extractOfferedTopic(_lastGraceAnswer);
+    if (offeredTopic) {
+      const kOff = lookupKnowledge(offeredTopic);
+      if (kOff && kOff.id !== _lastKnowledgeId) {
+        _lastKnowledgeId = kOff.id; _lastGraceAnswer = kOff.answer;
+        _lastOfferedProd = hasEnoughForProducts(); _lastOfferedSpec = false;
+        return { type:'text', text:kOff.answer, offerProducts:hasEnoughForProducts(), audioId:kOff.id };
+      }
+    }
+    return { type:'text', text:"Happy to help! What specifically would you like to know?", audioId:null };
+  }
+
+  if (_isNo(text)) {
+    _lastOfferedProd = false; _lastOfferedSpec = false;
+    return { type:'text', text:"No problem at all! What else can I help you understand about annuities?", audioId:null };
+  }
+
   // 1. Direct request for data
   if (wantsProducts(text)) {
     if (hasEnoughForProducts()) {
+      _lastOfferedProd = true;
       return { type:'products', text:"Absolutely — let me pull up the products that match what you've told me. Remember, I can't recommend one over another; I'm just showing you what fits your filters.", audioId: 'products_opening' };
     }
     return { type:'text', text:"Happy to pull up products. To narrow it to ones that actually fit, can you tell me what you're after first — steady income, growth, safety, or RMD help?", audioId: 'products_clarify' };
   }
 
-  // 2. Knowledge cache
+  // 2. Knowledge cache — direct lookup
   const k = lookupKnowledge(text);
   if (k) {
-    // If we now have enough slots, gently offer products after answering
-    let suffix = '';
-    if (hasEnoughForProducts() && (profile.state || profile.age || profile.premium)) {
-      suffix = '';  // the offer is already embedded in most answers
-    }
-    return { type:'text', text:k.answer + suffix, offerProducts: hasEnoughForProducts(), audioId: k.id };
+    _lastKnowledgeId = k.id; _lastGraceAnswer = k.answer;
+    _lastOfferedProd = hasEnoughForProducts(); _lastOfferedSpec = false;
+    return { type:'text', text:k.answer, offerProducts: hasEnoughForProducts(), audioId: k.id };
   }
 
-  // 3. No knowledge match — tag GHL immediately regardless of what path follows
+  // 3. Context-enriched lookup — inject topic into vague/short queries
+  if (_lastKnowledgeId) {
+    const enriched = _enrichQuery(text, _topicCtx());
+    if (enriched !== text) {
+      const k2 = lookupKnowledge(enriched);
+      if (k2 && k2.id !== _lastKnowledgeId) {
+        _lastKnowledgeId = k2.id; _lastGraceAnswer = k2.answer;
+        _lastOfferedProd = hasEnoughForProducts(); _lastOfferedSpec = false;
+        return { type:'text', text:k2.answer, offerProducts:hasEnoughForProducts(), audioId:k2.id };
+      }
+    }
+  }
+
+  // 4. No match — tag GHL and hand off
   notifyGhlUnanswered(text);
 
-  // 4. Novel question — OPTION C: graceful handoff (no paid LLM)
+  // 5. Novel question — graceful handoff (cache_only mode)
+  _lastOfferedProd = hasEnoughForProducts(); _lastOfferedSpec = true;
   if (CONFIG.brain.mode === 'cache_only') {
     return {
       type:'text',
