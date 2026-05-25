@@ -1826,6 +1826,7 @@ const graceMicLabel = document.getElementById('graceMicLabel');
 const graceSoundBars = document.getElementById('graceSoundBars');
 let voiceConvActive = false;
 let convMicRec = null;
+let introPlayed = false;
 
 const GRACE_GREETING = "Hi, I'm Grace. I can help you explore annuity rates, income options, bonuses, and current market information — including CANNEX research. You can ask me questions, compare information, and explore how different annuity features work at your own pace. Most visitors start with one question. What's yours?";
 
@@ -1997,7 +1998,9 @@ function startHeroVoice() {
   graceMicLabel.textContent = 'Grace is speaking…';
   stopCurrentAudio();
 
-  _currentAudio = new Audio('https://pub-d078fe3d9e9b411082d60ee89362b0ec.r2.dev/mic_prompt.mp3');
+  var audioId = introPlayed ? 'mic_prompt' : 'intro';
+  introPlayed = true;
+  _currentAudio = new Audio('https://pub-d078fe3d9e9b411082d60ee89362b0ec.r2.dev/' + audioId + '.mp3');
   graceSoundBars.classList.add('active');
   _currentAudio.onended = function() {
     graceSoundBars.classList.remove('active');
@@ -2013,7 +2016,8 @@ function startHeroVoice() {
     graceSoundBars.classList.remove('active');
     _currentAudio = null;
     if (!isMuted) {
-      var u = new SpeechSynthesisUtterance('What would you like to learn about?');
+      var fallbackText = audioId === 'intro' ? GRACE_GREETING : 'What would you like to learn about?';
+      var u = new SpeechSynthesisUtterance(fallbackText);
       var v = pickVoice(); if (v) u.voice = v;
       u.rate = 0.96; u.pitch = 1.02;
       u.onend = function() { if (SR) startHeroListening(); };
