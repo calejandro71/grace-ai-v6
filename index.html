@@ -1974,12 +1974,13 @@ function startHeroVoice() {
   var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   graceMicBtn.classList.add('active');
   graceMicLabel.textContent = 'Grace is speaking…';
-  speechSynthesis.cancel();
+  stopCurrentAudio();
 
-  var introAudio = new Audio('https://pub-d078fe3d9e9b411082d60ee89362b0ec.r2.dev/intro.mp3');
+  _currentAudio = new Audio('https://pub-d078fe3d9e9b411082d60ee89362b0ec.r2.dev/mic_prompt.mp3');
   graceSoundBars.classList.add('active');
-  introAudio.onended = function() {
+  _currentAudio.onended = function() {
     graceSoundBars.classList.remove('active');
+    _currentAudio = null;
     if (!SR) {
       graceMicLabel.textContent = 'Voice not supported — please type your question';
       graceMicBtn.classList.remove('active');
@@ -1987,15 +1988,15 @@ function startHeroVoice() {
     }
     startHeroListening();
   };
-  introAudio.onerror = function() {
+  _currentAudio.onerror = function() {
     graceSoundBars.classList.remove('active');
-    graceMicBtn.classList.remove('active');
+    _currentAudio = null;
     graceMicLabel.textContent = 'Tap to speak with Grace';
     if (SR) startHeroListening();
   };
-  introAudio.play().catch(function() {
+  _currentAudio.play().catch(function() {
     graceSoundBars.classList.remove('active');
-    graceMicBtn.classList.remove('active');
+    _currentAudio = null;
     graceMicLabel.textContent = 'Tap to speak with Grace';
     if (SR) startHeroListening();
   });
