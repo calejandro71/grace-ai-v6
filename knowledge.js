@@ -592,6 +592,10 @@ const KNOWLEDGE = [
     answer: "The <em>time value of money</em> is the principle that a dollar today is worth more than a dollar in the future — because the dollar you have now can be invested and earn interest in the meantime. This concept is the foundation of all annuity pricing. When an insurer quotes you a monthly income for a given lump sum, they are calculating the present value of all those future payments and confirming it equals your premium. As interest rates rise, future dollars are discounted more heavily, so the insurer can pay you more income for the same premium — which is why annuity income rates tend to be higher in higher interest-rate environments. It's also why starting income earlier produces a lower monthly payment than waiting: fewer remaining dollars need to cover more years."
   },
   {
+    id: 'intro', tier: 'meta', keywords: [],
+    answer: "Hi, I'm Grace. I can help you explore annuities, rates, income options, bonuses, and current market information using real industry data from over 80 different annuity companies. Most visitors start with one question. What's yours? Click the microphone below to talk with me, or type in your question."
+  },
+  {
     id: 'mic_prompt', tier: 'meta', keywords: [],
     answer: "What would you like to learn about?"
   },
