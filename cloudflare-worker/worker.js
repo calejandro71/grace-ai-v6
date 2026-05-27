@@ -137,11 +137,16 @@ export default {
       env.RATE_LIMIT.put(ipKey,    String(ipCount + 1),    { expirationTtl: 3600  }),
     ]);
 
-    // --- Return audio + text in header ---
-    return new Response(audioBuffer, {
+    // --- Return JSON { text, audio: base64 } — avoids header length limits ---
+    const bytes = new Uint8Array(audioBuffer);
+    let binary = '';
+    const CHUNK = 8192;
+    for (let i = 0; i < bytes.length; i += CHUNK) {
+      binary += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
+    }
+    return new Response(JSON.stringify({ text: graceText, audio: btoa(binary) }), {
       headers: corsHeaders(corsOrigin, {
-        'Content-Type': 'audio/mpeg',
-        'X-Grace-Text': encodeURIComponent(graceText),
+        'Content-Type': 'application/json',
         'Cache-Control': 'no-store',
       }),
     });

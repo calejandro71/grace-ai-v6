@@ -1470,7 +1470,10 @@ function _topicCtx() {
 
 // Detect affirmative responses
 function _isYes(text) {
-  return /^\s*(yes|yeah|yep|yup|sure|ok|okay|please|go ahead|absolutely|tell me|sounds good|great|definitely|of course|i would|let'?s|do it|why not|i'?m interested|i want|i'?d like|alright|all right|uh.?huh|please do|i will|i'?d love|love to|correct|exactly|perfect|right)\b/i.test(text);
+  const m = text.match(/^\s*(yes|yeah|yep|yup|sure|ok|okay|please|go ahead|absolutely|tell me|sounds good|great|definitely|of course|i would|let'?s|do it|why not|i'?m interested|i want|i'?d like|alright|all right|uh.?huh|please do|i will|i'?d love|love to|correct|exactly|perfect|right)\b[,.]?\s*/i);
+  if (!m) return false;
+  // If a real question follows (10+ chars), treat it as a new question, not a confirmation
+  return text.slice(m[0].length).trim().length < 10;
 }
 
 // Detect negative responses
@@ -1663,20 +1666,19 @@ async function askLLM(text) {
 
     if (!res.ok) throw new Error('worker_error');
 
-    const ct = res.headers.get('Content-Type') || '';
-
-    if (ct.includes('audio/mpeg')) {
-      // Worker returned ElevenLabs audio + text in header
-      const graceText = decodeURIComponent(res.headers.get('X-Grace-Text') || '');
-      const blob = await res.blob();
-      const audioBlobUrl = URL.createObjectURL(blob);
-      return { type: 'text', text: graceText, audioBlobUrl, offerProducts: hasEnoughForProducts() };
-    }
-
-    // Worker returned JSON (tts_error path — text only, TTS failed on server)
+    // Worker always returns JSON: { text, audio? } where audio is base64 mp3
     const data = await res.json().catch(() => ({}));
-    const answer = data.text || "Let me get a specialist to help with that.";
-    return { type: 'text', text: answer, offerProducts: hasEnoughForProducts() };
+    const graceText = data.text || "Let me get a specialist to help with that.";
+    let audioBlobUrl = null;
+    if (data.audio) {
+      try {
+        const binary = atob(data.audio);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+        audioBlobUrl = URL.createObjectURL(new Blob([bytes], { type: 'audio/mpeg' }));
+      } catch(e) {}
+    }
+    return { type: 'text', text: graceText, audioBlobUrl, offerProducts: hasEnoughForProducts() };
 
   } catch (e) {
     return { type: 'text', text: "That's a thoughtful question — I want to make sure you get a precise answer. A licensed specialist can go deep on that for your specific situation. Want me to set that up, or show products that match what you've shared?", offerSpecialist: true, offerProducts: hasEnoughForProducts(), audioId: 'handoff_main' };
