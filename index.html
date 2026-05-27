@@ -1265,13 +1265,10 @@ const CONFIG = {
 
   // --- Brain (answer engine) ---
   brain: {
-    // OPTION C (your choice): 'cache_only' = answer from the free knowledge cache;
-    // for anything novel, Grace gracefully hands off to a GHL specialist instead
-    // of calling a paid LLM. $0 per message. Compliance stays fully controlled.
-    //   'cache_first' = try cache, fall back to LLM proxy (needs /api/grace-chat)
-    //   'llm_always'  = always call the LLM (highest cost)
-    mode: 'cache_only',
-    llmEndpoint: '/api/grace-chat',       // only used if mode is cache_first/llm_always
+    // 'cache_first' = try knowledge cache, fall back to Cloudflare Worker (LLM + ElevenLabs TTS)
+    // 'cache_only'  = never call LLM; hand off to specialist instead ($0/msg)
+    mode: 'cache_first',
+    llmEndpoint: 'https://grace-chat-worker.REPLACE_YOUR_SUBDOMAIN.workers.dev',
     maxLlmCallsPerSession: 12,
   },
 
@@ -1641,31 +1638,48 @@ async function askBrain(text) {
    ========================================================================= */
 async function askLLM(text) {
   profile.llmCalls++;
-  const systemPrompt =
-    "You are Grace, an educational annuity guide for Annuity Alliance. " +
-    "CRITICAL COMPLIANCE: You NEVER recommend specific products, never say 'you should', " +
-    "never give financial/tax/legal advice. You explain concepts and describe what matches " +
-    "the user's stated filters. Defer all recommendations to licensed specialists. " +
-    "Keep answers to 2-4 warm, plain-English sentences. End by offering to show matching " +
-    "products or connect a specialist when relevant.";
 
-  // Only send last 6 turns to bound token cost
+  // Last 6 turns + current message — keeps token cost low
   const recent = profile.history.slice(-6).map(m => ({
-    role: m.role==='grace'?'assistant':'user', content: m.text
+    role: m.role === 'grace' ? 'assistant' : 'user', content: m.text
   }));
+  const messages = [...recent, { role: 'user', content: text }];
 
   try {
     const res = await fetch(CONFIG.brain.llmEndpoint, {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ system: systemPrompt, messages:[...recent, {role:'user', content:text}], profile })
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messages })
     });
-    if (!res.ok) throw new Error('LLM unavailable');
-    const data = await res.json();
-    const answer = data.reply || data.text || data.content || "Let me get a specialist to help with that.";
-    return { type:'text', text: answer, offerProducts: hasEnoughForProducts() };
+
+    // Rate-limit responses from the worker
+    if (res.status === 429) {
+      const j = await res.json().catch(() => ({}));
+      const msg = j.error === 'daily_cap_reached'
+        ? "I've reached my daily conversation limit — please check back tomorrow, or connect with a specialist right now for immediate help."
+        : "I'm getting a lot of questions at the moment — please try again in an hour, or connect with a specialist.";
+      return { type: 'text', text: msg, offerSpecialist: true, offerProducts: hasEnoughForProducts(), audioId: 'handoff_main' };
+    }
+
+    if (!res.ok) throw new Error('worker_error');
+
+    const ct = res.headers.get('Content-Type') || '';
+
+    if (ct.includes('audio/mpeg')) {
+      // Worker returned ElevenLabs audio + text in header
+      const graceText = decodeURIComponent(res.headers.get('X-Grace-Text') || '');
+      const blob = await res.blob();
+      const audioBlobUrl = URL.createObjectURL(blob);
+      return { type: 'text', text: graceText, audioBlobUrl, offerProducts: hasEnoughForProducts() };
+    }
+
+    // Worker returned JSON (tts_error path — text only, TTS failed on server)
+    const data = await res.json().catch(() => ({}));
+    const answer = data.text || "Let me get a specialist to help with that.";
+    return { type: 'text', text: answer, offerProducts: hasEnoughForProducts() };
+
   } catch (e) {
-    // Graceful offline fallback — no broken UX if backend isn't live yet
-    return { type:'text', text:"That's a thoughtful question. I'd want a licensed specialist to give you a precise answer on that one. In the meantime, I can show you products that match what you're looking for — want me to pull those up?", offerProducts: hasEnoughForProducts(), audioId: 'handoff_thoughtful' };
+    return { type: 'text', text: "That's a thoughtful question — I want to make sure you get a precise answer. A licensed specialist can go deep on that for your specific situation. Want me to set that up, or show products that match what you've shared?", offerSpecialist: true, offerProducts: hasEnoughForProducts(), audioId: 'handoff_main' };
   }
 }
 
@@ -1824,17 +1838,16 @@ async function handleUserMessage(text) {
     addGraceMessage(result.text, {offerProducts:false});
     setTimeout(showProductsButton, 600);
     if (!isMuted && voiceConvActive) {
-      if (result.audioId) playGraceAudio(result.audioId, stripHtml(result.text));
+      if (result.audioBlobUrl) playGraceAudioBlob(result.audioBlobUrl, stripHtml(result.text));
+      else if (result.audioId) playGraceAudio(result.audioId, stripHtml(result.text));
       else window.speak(stripHtml(result.text));
     }
   } else {
     addGraceMessage(result.text, {offerProducts: !!result.offerProducts, offerSpecialist: !!result.offerSpecialist});
     if (!isMuted && voiceConvActive) {
-      if (result.audioId) {
-        playGraceAudio(result.audioId, stripHtml(result.text));
-      } else {
-        window.speak(stripHtml(result.text));
-      }
+      if (result.audioBlobUrl) playGraceAudioBlob(result.audioBlobUrl, stripHtml(result.text));
+      else if (result.audioId) playGraceAudio(result.audioId, stripHtml(result.text));
+      else window.speak(stripHtml(result.text));
     }
   }
 }
@@ -2076,6 +2089,31 @@ function playGraceAudio(audioId, fallbackText) {
   _currentAudio.play().catch(function() {
     graceSoundBars.classList.remove('active');
     _currentAudio = null;
+    if (!isMuted) window.speak(fallbackText);
+  });
+}
+
+/* Play a one-time blob URL returned by the Cloudflare Worker (LLM + ElevenLabs) */
+function playGraceAudioBlob(blobUrl, fallbackText) {
+  stopCurrentAudio();
+  graceSoundBars.classList.add('active');
+  _currentAudio = new Audio(blobUrl);
+  _currentAudio.onended = function() {
+    graceSoundBars.classList.remove('active');
+    _currentAudio = null;
+    URL.revokeObjectURL(blobUrl);
+    if (voiceConvActive) startListeningForUser();
+  };
+  _currentAudio.onerror = function() {
+    graceSoundBars.classList.remove('active');
+    _currentAudio = null;
+    URL.revokeObjectURL(blobUrl);
+    if (!isMuted) window.speak(fallbackText);
+  };
+  _currentAudio.play().catch(function() {
+    graceSoundBars.classList.remove('active');
+    _currentAudio = null;
+    URL.revokeObjectURL(blobUrl);
     if (!isMuted) window.speak(fallbackText);
   });
 }

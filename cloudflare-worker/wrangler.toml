@@ -1,0 +1,22 @@
+name = "grace-chat-worker"
+main = "worker.js"
+compatibility_date = "2024-09-23"
+
+# KV namespace for rate limiting
+# Replace the id values after running: npx wrangler kv namespace create RATE_LIMIT
+[[kv_namespaces]]
+binding = "RATE_LIMIT"
+id = "REPLACE_WITH_KV_NAMESPACE_ID"
+preview_id = "REPLACE_WITH_KV_NAMESPACE_ID"
+
+# Configurable caps (override via Cloudflare dashboard > Worker > Settings > Variables)
+[vars]
+DAILY_CAP = "100"
+HOURLY_IP_CAP = "5"
+MAX_RESPONSE_CHARS = "600"
+ALLOWED_ORIGIN = "https://calejandro71.github.io"
+
+# Secrets (set via dashboard or: npx wrangler secret put ANTHROPIC_API_KEY)
+# ANTHROPIC_API_KEY
+# ELEVEN_API_KEY
+# ELEVEN_VOICE_ID
