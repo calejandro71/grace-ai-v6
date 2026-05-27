@@ -618,6 +618,30 @@ const KNOWLEDGE = [
   {
     id: 'handoff_thoughtful', tier: 'meta', keywords: [],
     answer: "That's a thoughtful question. I'd want a licensed specialist to give you a precise answer on that one. In the meantime, I can show you products that match what you're looking for — want me to pull those up?"
+  },
+  {
+    id: 'yes_generic', tier: 'meta', keywords: [],
+    answer: "Happy to help! What specifically would you like to know?"
+  },
+  {
+    id: 'no_generic', tier: 'meta', keywords: [],
+    answer: "No problem at all! What else can I help you understand about annuities?"
+  },
+  {
+    id: 'goal_income', tier: 'meta', keywords: [],
+    answer: "Income — that's the most common goal, and annuities are built for exactly that. I'll pull up products designed to pay you a guaranteed income stream for life. These are filtered to your goal — not a recommendation."
+  },
+  {
+    id: 'goal_growth', tier: 'meta', keywords: [],
+    answer: "Growth — got it. I'll pull up fixed-index annuities that tie your interest to a market index while keeping your principal protected from losses. Filtered to your goal, not a recommendation."
+  },
+  {
+    id: 'goal_safety', tier: 'meta', keywords: [],
+    answer: "Safety — a smart priority. I'll pull up the most principal-protected options from top-rated carriers, so your money can't go down with the market. Filtered to your goal, not a recommendation."
+  },
+  {
+    id: 'goal_rmd', tier: 'meta', keywords: [],
+    answer: "RMD help — good thinking. Some annuities are structured to satisfy required minimum distributions efficiently. I'll pull up the options that work best for that. Filtered to your goal, not a recommendation."
   }
 
 ];

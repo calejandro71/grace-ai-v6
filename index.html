@@ -841,6 +841,11 @@ const KNOWLEDGE = [
     answer: "Many fixed annuities have no upfront commission or load — instead the main cost is a <em>surrender charge</em> if you cash out or transfer within the first 5-10 years, often with a penalty-free withdrawal allowance (commonly 10%) after year one. Variable annuities tend to carry higher ongoing expenses through their sub-accounts. Always ask about every fee before you commit. Want me to show you the specific costs on products that match your filters?"
   },
   {
+    id: 'surrender_charges', tier: 'beginner',
+    keywords: ['surrender charge','surrender charges','surrender period','surrender schedule','surrender fee','early withdrawal penalty','what is a surrender charge','how much is a surrender charge','surrender'],
+    answer: "A surrender charge is a fee the insurance company collects if you withdraw more than the allowed amount during the early years of an annuity contract — typically the first five to ten years. The charge usually starts higher in year one (often 7–10%) and decreases by about one percentage point each year until it reaches zero. Most contracts also give you a <em>free withdrawal allowance</em> — commonly 10% of your account value per year — that you can take without triggering the charge. After the surrender period ends, you have full access to your money without any company penalty, though ordinary income tax still applies. Want me to filter for products with shorter surrender schedules?"
+  },
+  {
     id: 'select_company', tier: 'beginner',
     keywords: ['select the right company','which insurance company','how to choose a company','best company','which carrier','company ratings'],
     answer: "It's a competitive market with hundreds of carriers, and for the same type of annuity, purchase rates can differ by 5-10% — so the choice matters. Two things to weigh: the rate, and the carrier's financial-strength rating from agencies like A.M. Best (look for at least \"A-: Excellent\"). Since product features are often similar, many people start with the best rate from a strongly rated company. I show carrier ratings on every product — want me to pull up top-rated options in your state?"
@@ -1399,8 +1404,11 @@ function extractSlots(text) {
   }
   // Age
   if (!profile.age) {
-    const am = t.match(/\b(?:i'?m|age|aged|i am)\D{0,6}(\d{2})\b/) || t.match(/\b(\d{2})\s*(?:years old|yo)\b/);
-    if (am){ const n=+am[1]; if(n>=18&&n<=100){ profile.age=n; found.push('age'); } }
+    const am = t.match(/\b(?:i'?m|age|aged|i am|i.?m)\D{0,6}(\d{1,3})\b/)
+            || t.match(/\b(\d{1,3})\s*(?:years old|yr old|yo)\b/)
+            || t.match(/\bage\s*[:\-]?\s*(\d{1,3})\b/)
+            || (text.trim().length <= 40 ? t.match(/\b(\d{2,3})\b/) : null);
+    if (am){ const n=+am[1]; if(n>=1&&n<=120){ profile.age=n; found.push('age'); } }
   }
   if (found.length) updateProgress();
   return found;
@@ -1514,7 +1522,7 @@ function notifyGhlUnanswered(question) {
 }
 
 async function askBrain(text) {
-  extractSlots(text);
+  const newSlots = extractSlots(text);
 
   // 0. Yes / No context resolution (must run before keyword matching)
   if (_isYes(text)) {
@@ -1535,12 +1543,12 @@ async function askBrain(text) {
         return { type:'text', text:kOff.answer, offerProducts:hasEnoughForProducts(), audioId:kOff.id };
       }
     }
-    return { type:'text', text:"Happy to help! What specifically would you like to know?", audioId:null };
+    return { type:'text', text:"Happy to help! What specifically would you like to know?", audioId:'yes_generic' };
   }
 
   if (_isNo(text)) {
     _lastOfferedProd = false; _lastOfferedSpec = false;
-    return { type:'text', text:"No problem at all! What else can I help you understand about annuities?", audioId:null };
+    return { type:'text', text:"No problem at all! What else can I help you understand about annuities?", audioId:'no_generic' };
   }
 
   // 1. Direct request for data
@@ -1549,7 +1557,23 @@ async function askBrain(text) {
       _lastOfferedProd = true;
       return { type:'products', text:"Absolutely — let me pull up the products that match what you've told me. Remember, I can't recommend one over another; I'm just showing you what fits your filters.", audioId: 'products_opening' };
     }
+    _lastOfferedProd = true;
     return { type:'text', text:"Happy to pull up products. To narrow it to ones that actually fit, can you tell me what you're after first — steady income, growth, safety, or RMD help?", audioId: 'products_clarify' };
+  }
+
+  // 1b. Goal just captured — acknowledge it and show matching products
+  if (newSlots.includes('goal')) {
+    const GOAL_MSGS = {
+      income: { text: "Income — that's the most common goal, and annuities are built for exactly that. I'll pull up products designed to pay you a guaranteed income stream for life. These are filtered to your goal — not a recommendation.", audioId: 'goal_income' },
+      growth: { text: "Growth — got it. I'll pull up fixed-index annuities that tie your interest to a market index while keeping your principal protected from losses. Filtered to your goal, not a recommendation.", audioId: 'goal_growth' },
+      safety: { text: "Safety — a smart priority. I'll pull up the most principal-protected options from top-rated carriers, so your money can't go down with the market. Filtered to your goal, not a recommendation.", audioId: 'goal_safety' },
+      rmd:    { text: "RMD help — good thinking. Some annuities are structured to satisfy required minimum distributions efficiently. I'll pull up the options that work best for that. Filtered to your goal, not a recommendation.", audioId: 'goal_rmd' },
+    };
+    const gm = GOAL_MSGS[profile.goal];
+    if (gm) {
+      _lastOfferedProd = false; _lastOfferedSpec = false;
+      return { type: 'products', text: gm.text, audioId: gm.audioId };
+    }
   }
 
   // 2. Knowledge cache — direct lookup
@@ -1573,7 +1597,25 @@ async function askBrain(text) {
     }
   }
 
-  // 4. No match — tag GHL and hand off
+  // 4. Slot-only message — user provided state/age/etc in response to Grace's question
+  if (newSlots.length > 0 && hasEnoughForProducts()) {
+    _lastOfferedProd = false; _lastOfferedSpec = false;
+    const hasAge = newSlots.includes('age') || profile.age;
+    const hasState = newSlots.includes('state') || profile.state;
+    let slotAck;
+    if (newSlots.includes('age') && newSlots.includes('state')) {
+      slotAck = `Perfect — ${STATE_NAMES[profile.state] || profile.state}, age ${profile.age}. Let me narrow the products down to what fits you best.`;
+    } else if (newSlots.includes('age')) {
+      slotAck = `Got it — age ${profile.age}. Let me refine the products with that.`;
+    } else if (newSlots.includes('state')) {
+      slotAck = `Got it — ${STATE_NAMES[profile.state] || profile.state}. Let me pull up what's available in your state.`;
+    } else {
+      slotAck = "Thanks — let me update the products to match what you've shared.";
+    }
+    return { type: 'products', text: slotAck, audioId: 'products_opening' };
+  }
+
+  // 5. No match — tag GHL and hand off
   notifyGhlUnanswered(text);
 
   // 5. Novel question — graceful handoff (cache_only mode)
@@ -1667,13 +1709,14 @@ let conversationStarted=false;
 
 /* ====================== VIEW TRANSITION ================================== */
 function enterConversation(firstUserMsg) {
+  stopCurrentAudio();
   if (!conversationStarted) {
-    conversationStarted=true;
+    conversationStarted = true;
     heroView.classList.add('hidden');
     convView.classList.add('active');
-    progressCard.style.display='block';
+    progressCard.style.display = 'block';
     updateProgress();
-    // No opener — answer the user's question directly
+    if (voiceConvActive) syncListenToggleUI();
   }
   if (firstUserMsg) handleUserMessage(firstUserMsg);
 }
@@ -1853,7 +1896,13 @@ const listenLabel=document.getElementById('listenLabel');
 const listenIcon=document.getElementById('listenIcon');
 
 function stopCurrentAudio() {
-  if (_currentAudio) { _currentAudio.pause(); _currentAudio.src=''; _currentAudio=null; }
+  if (_currentAudio) {
+    _currentAudio.onended = null;
+    _currentAudio.onerror = null;
+    _currentAudio.pause();
+    _currentAudio.src = '';
+    _currentAudio = null;
+  }
   speechSynthesis.cancel();
   graceSoundBars.classList.remove('active');
 }
