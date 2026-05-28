@@ -2120,6 +2120,8 @@ function playGraceAudioBlob(blobUrl, fallbackText) {
   });
 }
 
+var SILENCE_DELAY = 2500; // ms of silence before Grace responds
+
 function startListeningForUser() {
   var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SR) return;
@@ -2128,6 +2130,7 @@ function startListeningForUser() {
   convMicRec.lang = 'en-US';
   convMicRec.interimResults = true;
   convMicRec.maxAlternatives = 1;
+  convMicRec.continuous = true;
   graceMicBtn.classList.add('active');
   graceMicLabel.textContent = 'Listening…';
 
@@ -2141,28 +2144,52 @@ function startListeningForUser() {
     transcript.scrollTop = transcript.scrollHeight;
   }
 
+  var accumulated = '';
+  var silenceTimer = null;
+
+  function submitAccumulated() {
+    silenceTimer = null;
+    var q = accumulated.trim();
+    accumulated = '';
+    if (!q) return;
+    try { convMicRec.stop(); } catch(e) {}
+    if (listenerEl) { listenerEl.remove(); listenerEl = null; }
+    graceMicBtn.classList.remove('active');
+    graceMicLabel.textContent = 'Grace is thinking…';
+    hasGesture = true;
+    handleUserMessage(q);
+  }
+
   convMicRec.onresult = function(e) {
-    var interim = '', final = '';
+    var interim = '', newFinal = '';
     for (var i = e.resultIndex; i < e.results.length; i++) {
-      if (e.results[i].isFinal) final += e.results[i][0].transcript;
+      if (e.results[i].isFinal) newFinal += e.results[i][0].transcript;
       else interim += e.results[i][0].transcript;
     }
-    if (listenerEl) listenerEl.querySelector('span').textContent = interim || final || 'Listening…';
-    if (final) {
-      if (listenerEl) { listenerEl.remove(); listenerEl = null; }
-      graceMicBtn.classList.remove('active');
-      graceMicLabel.textContent = 'Grace is thinking…';
-      hasGesture = true;
-      handleUserMessage(final.trim());
-    }
+    if (newFinal) accumulated += (accumulated ? ' ' : '') + newFinal;
+    var display = (accumulated + (interim ? ' ' + interim : '')).trim() || 'Listening…';
+    if (listenerEl) listenerEl.querySelector('span').textContent = display;
+    // Reset silence timer on any speech activity
+    if (silenceTimer) clearTimeout(silenceTimer);
+    if (accumulated) silenceTimer = setTimeout(submitAccumulated, SILENCE_DELAY);
   };
+
   var cleanup = function() {
+    if (silenceTimer) { clearTimeout(silenceTimer); silenceTimer = null; }
+    accumulated = '';
     graceMicBtn.classList.remove('active');
     if (graceMicLabel.textContent === 'Listening…') graceMicLabel.textContent = 'Tap to talk to Grace';
     if (listenerEl) { listenerEl.remove(); listenerEl = null; }
   };
   convMicRec.onerror = cleanup;
-  convMicRec.onend = cleanup;
+  convMicRec.onend = function() {
+    // Restart if stopped unexpectedly while we still have a pending submission
+    if (silenceTimer) {
+      try { convMicRec.start(); } catch(e) {}
+    } else {
+      cleanup();
+    }
+  };
   try { convMicRec.start(); } catch(e) {}
 }
 
@@ -2246,44 +2273,59 @@ function startHeroListening() {
   convMicRec.lang = 'en-US';
   convMicRec.interimResults = true;
   convMicRec.maxAlternatives = 1;
+  convMicRec.continuous = true;
   graceMicBtn.classList.add('active');
   graceMicLabel.textContent = 'Listening — ask your question…';
   var heroInp = document.getElementById('heroInput');
+  var heroAccumulated = '';
+  var heroSilenceTimer = null;
+
+  function submitHero() {
+    heroSilenceTimer = null;
+    var q = heroAccumulated.trim();
+    heroAccumulated = '';
+    if (!q) return;
+    try { convMicRec.stop(); } catch(e) {}
+    graceMicBtn.classList.remove('active');
+    graceMicLabel.textContent = 'Tap to speak with Grace';
+    if (heroInp) heroInp.value = '';
+    if (!conversationStarted) {
+      conversationStarted = true;
+      heroView.classList.add('hidden');
+      convView.classList.add('active');
+      progressCard.style.display = 'block';
+      updateProgress();
+    }
+    window.handleUserMessage(q);
+  }
+
   convMicRec.onresult = function(ev) {
-    var interim = '', final = '';
+    var interim = '', newFinal = '';
     for (var i = ev.resultIndex; i < ev.results.length; i++) {
-      if (ev.results[i].isFinal) final += ev.results[i][0].transcript;
+      if (ev.results[i].isFinal) newFinal += ev.results[i][0].transcript;
       else interim += ev.results[i][0].transcript;
     }
-    if (interim) {
-      graceMicLabel.textContent = interim;
-      if (heroInp) heroInp.value = interim;
-    }
-    if (final) {
-      var q = final.trim();
-      graceMicBtn.classList.remove('active');
-      graceMicLabel.textContent = 'Tap to speak with Grace';
-      if (heroInp) heroInp.value = q;
-      // Switch to conv view without replaying Grace's opener (already spoken)
-      if (!conversationStarted) {
-        conversationStarted = true;
-        heroView.classList.add('hidden');
-        convView.classList.add('active');
-        progressCard.style.display = 'block';
-        updateProgress();
-      }
-      if (heroInp) heroInp.value = '';
-      window.handleUserMessage(q);
-    }
+    if (newFinal) heroAccumulated += (heroAccumulated ? ' ' : '') + newFinal;
+    var display = (heroAccumulated + (interim ? ' ' + interim : '')).trim();
+    if (display) graceMicLabel.textContent = display;
+    if (heroInp) heroInp.value = display;
+    if (heroSilenceTimer) clearTimeout(heroSilenceTimer);
+    if (heroAccumulated) heroSilenceTimer = setTimeout(submitHero, SILENCE_DELAY);
   };
   convMicRec.onerror = function() {
+    if (heroSilenceTimer) { clearTimeout(heroSilenceTimer); heroSilenceTimer = null; }
+    heroAccumulated = '';
     graceMicBtn.classList.remove('active');
     graceMicLabel.textContent = 'Tap to speak with Grace';
   };
   convMicRec.onend = function() {
-    graceMicBtn.classList.remove('active');
-    if (graceMicLabel.textContent === 'Listening — ask your question…') {
-      graceMicLabel.textContent = 'Tap to speak with Grace';
+    if (heroSilenceTimer) {
+      try { convMicRec.start(); } catch(e) {}
+    } else {
+      graceMicBtn.classList.remove('active');
+      if (graceMicLabel.textContent === 'Listening — ask your question…') {
+        graceMicLabel.textContent = 'Tap to speak with Grace';
+      }
     }
   };
   try { convMicRec.start(); } catch(e) {}
